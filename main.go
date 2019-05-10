@@ -207,11 +207,11 @@ func learnword(c echo.Context) error {
 	token := jsoneReq.Token
 	id := getIdAndIsVaildToken(token)
 	if id == primitive.NilObjectID {
-		return c.String(401, "Invalid JWT Token or exp")
+		return c.String(401, "Invalid JWT Token or expccc")
 	}
 	fmt.Println(token, id)
-	
-	if err := learn(id, jsoneReq.Data) ;  err != nil {
+
+	if err := learn(id, jsoneReq.Data); err != nil {
 		return err
 	}
 	return c.String(http.StatusOK, fmt.Sprintf("%v", jsoneReq.Data))
