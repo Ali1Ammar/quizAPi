@@ -207,7 +207,7 @@ func learnword(c echo.Context) error {
 	token := jsoneReq.Token
 	id := getIdAndIsVaildToken(token)
 	if id == primitive.NilObjectID {
-		return c.String(401, "Invalid JWT Token or expccc")
+		return c.String(401, "Invalid JWT Token or        expccc")
 	}
 	fmt.Println(token, id)
 
