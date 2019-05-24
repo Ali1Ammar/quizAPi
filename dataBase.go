@@ -14,17 +14,21 @@ import (
 )
 
 type UserInfo struct {
-	ID       primitive.ObjectID `json:"id" bson:"_id"`
-	Name     string             `bson:"name" json:"name"`
-	Email    string             `bson:"email" json:"email"`
-	Pass     []byte             `bson:"pass" json:"pass"`
-	Words    []WordInfo         `bson:"words" json:"words"`
-	UuidHash [16]byte           `bson:"uuidHash" json:"uuidHash"`
+	ID          primitive.ObjectID `json:"id" bson:"_id"`
+	Name        string             `bson:"name" json:"name"`
+	Email       string             `bson:"email" json:"email"`
+	Words       []WordInfo         `bson:"words" json:"words"`
+	SubGoogleId string             `bson:"subGoogleId" json:"subGoogleId"`
+	FacebookId  string             `bson:"facebookId" json:"facebookId"`
 }
 
 type UserInfoset struct {
-	Name  string `bson:"name" json:"name"`
-	Email string `bson:"email" json:"email"`
+	Name        string `bson:"name" json:"name"`
+	Email       string `bson:"email" json:"email"`
+	PhotoUrl    string `bson:"photoUrl" json:"photoUrl"`
+	Local       string `bson:"locale" json:"locale"`
+	SubGoogleId string `bson:"subGoogleId" json:"subGoogleId"`
+	FacebookId  string `bson:"facebookId" json:"facebookId"`
 }
 type WordInfo struct {
 	Word  string    `bson:"word" json:"word"`
@@ -98,41 +102,38 @@ func insertManyWord(words []WordInfo, id primitive.ObjectID) error {
 	return err
 }
 
-func findByEmail(email string) (bool, UserInfo) {
+func findBysubGoogleId(sub string) (bool, UserInfo) {
 	_, col := connectDB()
 	//defer disconnectDb(client) // have error when used but still work
 	findOneOptions := options.FindOne()
-	findOneOptions.SetProjection(bson.D{{Key: "_id", Value: 1}, {Key: "pass", Value: 1}, {Key: "uuidHash", Value: 1}})
-	filter := bson.D{{Key: "email", Value: email}}
+	findOneOptions.SetProjection(bson.D{{Key: "subGoogleId", Value: 1}, {Key: "id", Value: 1}})
+	filter := bson.D{{Key: "subGoogleId", Value: sub}}
 	var result UserInfo
 	err := col.FindOne(nil, filter, findOneOptions).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return false, result
 		}
-		log.Fatal(err)
 	}
-	fmt.Print(result.UuidHash, " ::::::::: PASSSSSSS::::::: ", result.Pass)
-
 	return true, result
 }
-func IsEmailExist(email string) bool {
+
+func findBysubFacbookId(id string) (bool, UserInfo) {
 	_, col := connectDB()
-	fmt.Println("after if call 1")
 	//defer disconnectDb(client) // have error when used but still work
-	filter := bson.D{{Key: "email", Value: email}}
+	findOneOptions := options.FindOne()
+	findOneOptions.SetProjection(bson.D{{Key: "FacebookId", Value: 1}, {Key: "id", Value: 1}})
+	filter := bson.D{{Key: "FacebookId", Value: id}}
 	var result UserInfo
-	fmt.Println("after if call 2")
-	err := col.FindOne(nil, filter).Decode(&result)
+	err := col.FindOne(nil, filter, findOneOptions).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return false
+			return false, result
 		}
-		fmt.Println("after if call 4")
-		log.Fatal(err)
 	}
-	return true
+	return true, result
 }
+
 func addHashPass(hashPass []byte, uuidHash uuid.UUID, id primitive.ObjectID) {
 	_, col := connectDB()
 	filter := bson.D{{Key: "_id", Value: id}}
@@ -233,3 +234,37 @@ func learn(id primitive.ObjectID, data []dataReq) error {
 
 	return nil
 }
+
+// func findByEmail(email string) (bool, UserInfo) {
+// 	_, col := connectDB()
+// 	//defer disconnectDb(client) // have error when used but still work
+// 	findOneOptions := options.FindOne()
+// 	findOneOptions.SetProjection(bson.D{{Key: "_id", Value: 1}})
+// 	filter := bson.D{{Key: "email", Value: email}}
+// 	var result UserInfo
+// 	err := col.FindOne(nil, filter, findOneOptions).Decode(&result)
+// 	if err != nil {
+// 		if err == mongo.ErrNoDocuments {
+// 			return false, result
+// 		}
+// 	}
+// 	return true, result
+// }
+
+// func IsEmailExist(email string) string {
+// 	_, col := connectDB()
+// 	fmt.Println("after if call 1")
+// 	//defer disconnectDb(client) // have error when used but still work
+// 	filter := bson.D{{Key: "email", Value: email}}
+// 	var result UserInfo
+// 	fmt.Println("after if call 2")
+// 	err := col.FindOne(nil, filter).Decode(&result)
+// 	if err != nil {
+// 		if err == mongo.ErrNoDocuments {
+// 			return nil
+// 		}
+// 		fmt.Println("after if call 4")
+// 		log.Fatal(err)
+// 	}
+// 	return result.ID.String()
+// }

@@ -1,26 +1,41 @@
 package main
 
 import (
-	//"go/token"
-	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
-	"github.com/labstack/echo"
+	"github.com/GoogleIdTokenVerifier/GoogleIdTokenVerifier"
+
+	//	"github.com/dgrijalva/jwt-go"
+
 	"github.com/labstack/echo/middleware"
+	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/uuid"
-	"golang.org/x/crypto/pbkdf2"
 )
 
-var key string = "SecretKeyForJWT#$*(FJIEOF$FEFK#"
+var accessKey string = "SecretaccessKeyForJWT#$*(FJIEOF$FEFK#"
+var refreshKey string = "Secret#@DFWrefreshKeyForJWT#$*(FJIEOF$FEFK#"
+var myaud string = "421652019678-c76vldjrurop7m3thl75msi805hdqcrb.apps.googleusercontent.com"
+var id string = "1646756352305359"
+var secid string = "52604b40a547e38ed33754a6e5ccaa5a"
+
+type debuginfo struct {
+	AppId   string `json:"app_id"`
+	IsValid bool   `json:"is_valid"`
+	UserId  string `json:"user_id"`
+}
+type Usertokeninfo struct {
+	UserId  string `json:"id"`
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Picture struct {
+		Data struct {
+			Url string `json:"url"`
+		} `json:"data"`
+	} `json:"picture"`
+}
 
 type dataReq struct {
 	Word  string `json:"word" form:"word" query:"word"`
@@ -30,6 +45,10 @@ type dataReq struct {
 type jsonreq struct {
 	Token string    `json:"token" form:"token" query:"token"`
 	Data  []dataReq `json:"data" form:"data" query:"data"`
+}
+type authres struct {
+	refresh string `json:"refresh"`
+	access  string `json:"access"`
 }
 
 func main() {
@@ -43,65 +62,64 @@ func main() {
 	version1(e)
 	e.Logger.Fatal(e.Start(":1323"))
 }
-func validateEmail(email string) bool {
-	Re := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
-	return Re.MatchString(email)
-}
+
 func version1(e *echo.Echo) {
 	v1 := e.Group("/api/v1")
-	v1.POST("/user/login", loginUser)
-	v1.POST("/user/signin", signinUser)
+	//	v1.POST("/user/login", loginUser)
+	//	v1.POST("/user/signin", signinUser)
 	v1.POST("/word/add", addWord)
 	v1.POST("/word/all", allWord)
 	v1.POST("/word/sync", syncword)
 	v1.POST("/word/learn", learnword)
+	v1.GET("/oauth/google", oauthGetGoogle)
+	v1.GET("/oauth/facebook", oauthGetFacebook)
+	v1.GET("/oauth/refresh", refreshToken)
+}
 
-}
-func loginUser(c echo.Context) error {
-	email := c.FormValue("email")
-	if !validateEmail(email) {
-		return c.String(401, "Email or Password is Not correct")
-	}
-	fmt.Println("Email : ", email, "...")
-	emailExist, result := findByEmail(email)
+func refreshToken(c echo.Context) error {
+	token := c.QueryParam("token")
 
-	fmt.Println("Email : ", email, "...")
-	newPass := hashPAssfunc(c.FormValue("pass"), result.UuidHash, result.ID)
-	fmt.Println(result.Pass, "  ::: ", newPass, " ==  ", bytes.Equal(newPass, result.Pass))
-	if emailExist && bytes.Equal(newPass, result.Pass) {
-		newJWT := createToken(key, result.ID.String())
-		return c.JSON(202, newJWT)
+	return c.String(400, token)
+}
+
+func oauthGetFacebook(c echo.Context) error {
+	fmt.Println("handle Correct GOOOOOOOOOD Facebook")
+	token := c.QueryParam("token")
+	if resultInfo := faceVerify(token); resultInfo != nil {
+		/////token verify corrcet
+		if isexist, result := findBysubFacbookId(resultInfo.UserId); isexist {
+			tokenObject := createToken(result.ID.Hex())
+			return c.JSON(201, tokenObject)
+		} else {
+			user := UserInfoset{Name: resultInfo.Name, Email: resultInfo.Email, PhotoUrl: resultInfo.Picture.Data.Url, FacebookId: resultInfo.UserId}
+			id := user.insertUser()
+			tokenObject := createToken(id.Hex())
+			return c.JSON(201, tokenObject)
+		}
 	} else {
-		return c.String(401, "Email or Password is Not correct")
+		return c.String(401, "Invalid JWT Token or exp")
 	}
 }
-func createToken(key string, id string) string {
-	token := jwt.New(jwt.SigningMethodHS256)
-	claims := token.Claims.(jwt.MapClaims)
-	exp := time.Now().Add(time.Hour * 72).Unix()
-	claims["id"] = id
-	claims["exp"] = exp
-	t, err := token.SignedString([]byte(key + "___Good###" + id))
-	if err != nil {
-		log.Fatal(err)
+
+func oauthGetGoogle(c echo.Context) error {
+	fmt.Println("handle Correct GOOOOOOOOOD")
+	token := c.QueryParam("token")
+	tokenInfo := GoogleIdTokenVerifier.Verify(token, myaud)
+	if tokenInfo == nil {
+		return c.String(401, "Invalid JWT Token or exp")
 	}
-	return t
-}
-func signinUser(c echo.Context) error {
-	email := c.FormValue("email")
-	if IsEmailExist(email) {
-		return c.String(409, "this Email is already used")
+	if isexist, result := findBysubGoogleId(tokenInfo.Sub); isexist {
+		tokenObject := createToken(result.ID.Hex())
+		return c.JSON(201, tokenObject)
 	} else {
-		user := UserInfoset{Name: c.FormValue("name"), Email: email}
+		user := UserInfoset{Name: tokenInfo.Name, Email: tokenInfo.Email, PhotoUrl: tokenInfo.Picture, Local: tokenInfo.Local, SubGoogleId: tokenInfo.Sub}
 		id := user.insertUser()
-		token := createToken(key, id.String())
-		uuidHash, _ := uuid.New()
-		hashPass := hashPAssfunc(c.FormValue("pass"), uuidHash, id)
-		addHashPass(hashPass, uuidHash, id)
-		//	return c.JSON(201, map[string]string{"messege": "sign in suecceful", "token": token})
-		return c.JSON(201, token)
+		tokenObject := createToken(id.Hex())
+		return c.JSON(201, tokenObject)
 	}
+
 }
+
 func addWord(c echo.Context) error {
 	token := c.FormValue("token")
 	id := getIdAndIsVaildToken(token)
@@ -129,39 +147,6 @@ func addWord(c echo.Context) error {
 		return c.String(200, "correct done")
 	}
 }
-func getIdAndIsVaildToken(tokenStr string) primitive.ObjectID {
-
-	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-		var id string = token.Claims.(jwt.MapClaims)["id"].(string)
-		keys := key + "___Good###" + id
-		return []byte(keys), nil
-	})
-
-	if err != nil {
-		return primitive.NilObjectID
-	}
-
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		fmt.Println(claims, "   ::: CLiammmmmmmmms true  ::::", ok, token.Valid)
-		idtext := strings.TrimSuffix(strings.TrimPrefix(claims["id"].(string), "ObjectID(\""), "\")")
-		idc, err := primitive.ObjectIDFromHex(idtext)
-		fmt.Println(idtext, "  ::  ", idc)
-		if err != nil {
-			fmt.Println(err)
-		}
-		return idc
-	} else {
-		fmt.Println(claims, "   ::: CLiammmmmmmmms  ::::", ok, token.Valid)
-		log.Printf("Invalid JWT Token")
-		return primitive.NilObjectID
-	}
-}
-func hashPAssfunc(pass string, key [16]byte, id primitive.ObjectID) []byte {
-	fmt.Println(pass, " :: ", key, " :: ", id.String())
-
-	return pbkdf2.Key([]byte(pass), append([]byte(id.String()), key[:]...), 10, 64, sha256.New)
-
-}
 
 func allWord(c echo.Context) error {
 	token := c.FormValue("token")
@@ -173,11 +158,9 @@ func allWord(c echo.Context) error {
 		if mywords.Words == nil {
 			return c.String(204, "no contect")
 		}
-
 		return c.JSON(200, mywords)
 	}
 }
-
 func syncword(c echo.Context) error {
 	token := c.FormValue("token")
 	id := getIdAndIsVaildToken(token)
@@ -196,7 +179,6 @@ func syncword(c echo.Context) error {
 	fmt.Println("HERE LEN not 0")
 	return c.JSON(200, newword)
 }
-
 func learnword(c echo.Context) error {
 
 	var jsoneReq jsonreq
@@ -212,7 +194,35 @@ func learnword(c echo.Context) error {
 	fmt.Println(token, id)
 
 	if err := learn(id, jsoneReq.Data); err != nil {
-		return err
+		return c.String(400, err.Error())
 	}
-	return c.String(http.StatusOK, fmt.Sprintf("%v", jsoneReq.Data))
+	return c.String(200, "Done")
 }
+
+// func hashPAssfunc(pass string, accessKey [16]byte, id primitive.ObjectID) []byte {
+// 	fmt.Println(pass, " :: ", accessKey, " :: ", id.String())
+
+// 	return pbkdf2.accessKey([]byte(pass), append([]byte(id.String()), accessKey[:]...), 10, 64, sha256.New)
+
+// }
+
+// func signinUser(c echo.Context) error {
+// 	email := c.FormValue("email")
+// 	if IsEmailExist(email) {
+// 		return c.String(409, "this Email is already used")
+// 	} else {
+// 		user := UserInfoset{Name: c.FormValue("name"), Email: email}
+// 		id := user.insertUser()
+// 		token := createAccessToken(accessKey, id.String())
+// 		uuidHash, _ := uuid.New()
+// 		hashPass := hashPAssfunc(c.FormValue("pass"), uuidHash, id)
+// 		addHashPass(hashPass, uuidHash, id)
+// 		//	return c.JSON(201, map[string]string{"messege": "sign in suecceful", "token": token})
+// 		return c.JSON(201, token)
+// 	}
+// }
+
+// func validateEmail(email string) bool {
+// 	Re := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
+// 	return Re.MatchString(email)
+// }
