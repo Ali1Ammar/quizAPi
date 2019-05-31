@@ -23,6 +23,7 @@ func createAccessToken(accessKey string, id string) string {
 	claims := token.Claims.(jwt.MapClaims)
 	exp := time.Now().Add(time.Hour * 72).Unix()
 	claims["id"] = id
+	claims["type"] = "access"
 	claims["exp"] = exp
 	t, err := token.SignedString([]byte(accessKey + "___Good###" + id))
 	if err != nil {
@@ -57,7 +58,7 @@ func getIdAndIsVaildToken(tokenStr string) primitive.ObjectID {
 		return primitive.NilObjectID
 	}
 
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid && claims["type"] == "access" {
 		fmt.Println(claims, "   ::: CLiammmmmmmmms true  ::::", ok, token.Valid)
 		//		idtext := strings.TrimSuffix(strings.TrimPrefix(claims["id"].(string), "ObjectID(\""), "\")")
 		idc, err := primitive.ObjectIDFromHex(claims["id"].(string))
@@ -98,6 +99,33 @@ func faceVerify(token string) *Usertokeninfo {
 
 func createToken(id string) authres {
 	accessToken := createAccessToken(accessKey, id)
-	refreshJWT := createRefreshToken(refreshKey, id) 
-	return  authres{refresh: refreshJWT, access: accessToken}
-} 
+	refreshJWT := createRefreshToken(refreshKey, id)
+	return authres{Refresh: refreshJWT, Access: accessToken}
+}
+
+func IsVaildRefreshToken(tokenStr string) primitive.ObjectID {
+
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		var id string = token.Claims.(jwt.MapClaims)["id"].(string)
+		keys := refreshKey + "____bad###" + id
+		return []byte(keys), nil
+	})
+
+	if err != nil {
+		return primitive.NilObjectID
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid && claims["type"] == "refresh" {
+		fmt.Println(claims, "   ::: CLiammmmmmmmms true  ::::", ok, token.Valid)
+		//		idtext := strings.TrimSuffix(strings.TrimPrefix(claims["id"].(string), "ObjectID(\""), "\")")
+		idc, err := primitive.ObjectIDFromHex(claims["id"].(string))
+		if err != nil {
+			fmt.Println(err)
+		}
+		return idc
+	} else {
+		fmt.Println(claims, "   ::: CLiammmmmmmmms  ::::", ok, token.Valid)
+		log.Printf("Invalid JWT Token")
+		return primitive.NilObjectID
+	}
+}

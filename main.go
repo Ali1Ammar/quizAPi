@@ -10,9 +10,10 @@ import (
 
 	//	"github.com/dgrijalva/jwt-go"
 
+	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
-	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	//github.com\mongodb\mongo-go-driver
 )
 
 var accessKey string = "SecretaccessKeyForJWT#$*(FJIEOF$FEFK#"
@@ -47,8 +48,8 @@ type jsonreq struct {
 	Data  []dataReq `json:"data" form:"data" query:"data"`
 }
 type authres struct {
-	refresh string `json:"refresh"`
-	access  string `json:"access"`
+	Refresh string `json:"refresh" form:"refresh" query:"refresh"`
+	Access  string `json:"access" form:"access" query:"access"`
 }
 
 func main() {
@@ -78,8 +79,12 @@ func version1(e *echo.Echo) {
 
 func refreshToken(c echo.Context) error {
 	token := c.QueryParam("token")
-
-	return c.String(400, token)
+	id := IsVaildRefreshToken(token)
+	if id == primitive.NilObjectID {
+		return c.String(200, "exp resfresh token or invaild")
+	}
+	newAccess := createAccessToken(accessKey, id.Hex())
+	return c.String(400, newAccess)
 }
 
 func oauthGetFacebook(c echo.Context) error {
@@ -106,15 +111,20 @@ func oauthGetGoogle(c echo.Context) error {
 	token := c.QueryParam("token")
 	tokenInfo := GoogleIdTokenVerifier.Verify(token, myaud)
 	if tokenInfo == nil {
+		fmt.Println("nil")
 		return c.String(401, "Invalid JWT Token or exp")
 	}
 	if isexist, result := findBysubGoogleId(tokenInfo.Sub); isexist {
 		tokenObject := createToken(result.ID.Hex())
+		fmt.Println(tokenObject.Refresh, "   2 ", tokenObject.Access)
+		fmt.Println(tokenObject)
 		return c.JSON(201, tokenObject)
 	} else {
 		user := UserInfoset{Name: tokenInfo.Name, Email: tokenInfo.Email, PhotoUrl: tokenInfo.Picture, Local: tokenInfo.Local, SubGoogleId: tokenInfo.Sub}
 		id := user.insertUser()
 		tokenObject := createToken(id.Hex())
+		fmt.Println(tokenObject)
+		fmt.Println(tokenObject.Refresh, "   2 ", tokenObject.Access)
 		return c.JSON(201, tokenObject)
 	}
 
