@@ -16,11 +16,11 @@ import (
 	//github.com\mongodb\mongo-go-driver
 )
 
-var accessKey string = "SecretaccessKeyForJWT#$*(FJIEOF$FEFK#"
-var refreshKey string = "Secret#@DFWrefreshKeyForJWT#$*(FJIEOF$FEFK#"
-var myaud string = "421652019678-c76vldjrurop7m3thl75msi805hdqcrb.apps.googleusercontent.com"
-var id string = "1646756352305359"
-var secid string = "52604b40a547e38ed33754a6e5ccaa5a"
+const accessKey = "SecretaccessKeyForJWT#$*(FJIEOF$FEFK#"
+const refreshKey = "Secret#@DFWrefreshKeyForJWT#$*(FJIEOF$FEFK#"
+const myaud = "421652019678-c76vldjrurop7m3thl75msi805hdqcrb.apps.googleusercontent.com"
+const id = "1646756352305359"
+const secid = "52604b40a547e38ed33754a6e5ccaa5a"
 
 type debuginfo struct {
 	AppId   string `json:"app_id"`
@@ -38,15 +38,12 @@ type Usertokeninfo struct {
 	} `json:"picture"`
 }
 
-type dataReq struct {
+type LearnInfo struct {
 	Word  string `json:"word" form:"word" query:"word"`
 	Learn int    `json:"learn" form:"learn" query:"learn"`
-	Qtype []int  `json:"Qtype" form:"Qtype" query:"Qtype"`
+	//Qtype []int  `json:"Qtype" form:"Qtype" query:"Qtype"`
 }
-type jsonreq struct {
-	Token string    `json:"token" form:"token" query:"token"`
-	Data  []dataReq `json:"data" form:"data" query:"data"`
-}
+
 type authres struct {
 	Refresh string `json:"refresh" form:"refresh" query:"refresh"`
 	Access  string `json:"access" form:"access" query:"access"`
@@ -61,13 +58,19 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	version1(e)
+	test(e)
+
 	e.Logger.Fatal(e.Start(":1323"))
 }
-
+func test(e *echo.Echo) {
+	t := e.Group("/api/test")
+	t.GET("/", testApi)
+	t.POST("/user/signin", signinUser)
+}
 func version1(e *echo.Echo) {
 	v1 := e.Group("/api/v1")
 	//	v1.POST("/user/login", loginUser)
-	//	v1.POST("/user/signin", signinUser)
+
 	v1.POST("/word/add", addWord)
 	v1.POST("/word/all", allWord)
 	v1.POST("/word/sync", syncword)
@@ -76,15 +79,18 @@ func version1(e *echo.Echo) {
 	v1.GET("/oauth/facebook", oauthGetFacebook)
 	v1.GET("/oauth/refresh", refreshToken)
 }
+func testApi(c echo.Context) error {
 
+	return c.String(200, "OKKKKKKk")
+}
 func refreshToken(c echo.Context) error {
 	token := c.QueryParam("token")
 	id := IsVaildRefreshToken(token)
 	if id == primitive.NilObjectID {
-		return c.String(200, "exp resfresh token or invaild")
+		return c.String(401, "exp resfresh token or invaild")
 	}
 	newAccess := createAccessToken(accessKey, id.Hex())
-	return c.String(400, newAccess)
+	return c.String(201, newAccess)
 }
 
 func oauthGetFacebook(c echo.Context) error {
@@ -131,11 +137,15 @@ func oauthGetGoogle(c echo.Context) error {
 }
 
 func addWord(c echo.Context) error {
+	fmt.Println("handle Corrcectt")
 	token := c.FormValue("token")
 	id := getIdAndIsVaildToken(token)
+
 	if id == primitive.NilObjectID {
+		fmt.Println("error jwt")
 		return c.String(401, "Invalid JWT Token or exp")
 	} else {
+		fmt.Println("accept")
 		words := c.FormValue("words")
 		var wordsStruct []WordInfo
 		err := json.Unmarshal([]byte(words), &wordsStruct)
@@ -152,7 +162,7 @@ func addWord(c echo.Context) error {
 		fmt.Println("it is date : ", wordsStruct)
 		errr := insertManyWord(wordsStruct, id)
 		if errr != nil {
-			return c.String(400, "error for formatted words")
+			return c.String(422, "invalid data")
 		}
 		return c.String(200, "correct done")
 	}
@@ -180,7 +190,7 @@ func syncword(c echo.Context) error {
 	datesync := c.FormValue("datesync")
 	timeDate, err := time.Parse(time.RFC3339, datesync)
 	if err != nil {
-		return c.String(400, "date format wrong")
+		return c.String(422, "invalid data")
 	}
 	newword := syncDate(id, timeDate)
 	if len(newword.Words) == 0 {
@@ -191,19 +201,28 @@ func syncword(c echo.Context) error {
 }
 func learnword(c echo.Context) error {
 
-	var jsoneReq jsonreq
-	if err := c.Bind(&jsoneReq); err != nil {
-		return err
-	}
-	fmt.Println(jsoneReq)
-	token := jsoneReq.Token
+	// var jsoneReq jsonreq
+
+	// if err := c.Bind(&jsoneReq); err != nil {
+	// 	return err
+	// }
+	// fmt.Println(jsoneReq)
+	// token := jsoneReq.Token
+
+	// new without json file but with form body
+	token := c.FormValue("token")
 	id := getIdAndIsVaildToken(token)
 	if id == primitive.NilObjectID {
-		return c.String(401, "Invalid JWT Token or        expccc")
+		return c.String(401, "Invalid JWT Token or expccc")
 	}
-	fmt.Println(token, id)
+	data := c.FormValue("data")
+	var dataStrct []LearnInfo
+	err := json.Unmarshal([]byte(data), &dataStrct)
+	if err != nil {
+		return c.String(422, "invalid data")
+	}
 
-	if err := learn(id, jsoneReq.Data); err != nil {
+	if err := learn(id, dataStrct); err != nil {
 		return c.String(400, err.Error())
 	}
 	return c.String(200, "Done")
@@ -216,21 +235,25 @@ func learnword(c echo.Context) error {
 
 // }
 
-// func signinUser(c echo.Context) error {
-// 	email := c.FormValue("email")
-// 	if IsEmailExist(email) {
-// 		return c.String(409, "this Email is already used")
-// 	} else {
-// 		user := UserInfoset{Name: c.FormValue("name"), Email: email}
-// 		id := user.insertUser()
-// 		token := createAccessToken(accessKey, id.String())
-// 		uuidHash, _ := uuid.New()
-// 		hashPass := hashPAssfunc(c.FormValue("pass"), uuidHash, id)
-// 		addHashPass(hashPass, uuidHash, id)
-// 		//	return c.JSON(201, map[string]string{"messege": "sign in suecceful", "token": token})
-// 		return c.JSON(201, token)
-// 	}
-// }
+func signinUser(c echo.Context) error {
+	fmt.Println("true handle sign")
+	email := c.FormValue("email")
+	if iid := IsEmailExist(email); iid != "" {
+		fmt.Println("found idd\n", iid)
+		tokenObject := createToken(iid)
+		return c.JSON(201, tokenObject)
+	} else {
+		fmt.Println("notfound")
+		user := UserInfoset{Name: c.FormValue("name"), Email: email}
+		id := user.insertUser()
+		token := createToken(id.String())
+		//	uuidHash, _ := uuid.New()
+		// hashPass := hashPAssfunc(c.FormValue("pass"), uuidHash, id)
+		// addHashPass(hashPass, uuidHash, id)
+		//	return c.JSON(201, map[string]string{"messege": "sign in suecceful", "token": token})
+		return c.JSON(201, token)
+	}
+}
 
 // func validateEmail(email string) bool {
 // 	Re := regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)

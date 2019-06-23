@@ -44,7 +44,7 @@ type WordInfotosend struct {
 	Learn int    `bson:"learn" json:"learn"`
 	//	Ldate time.Time `bson:"Ldate" json:"Ldate"`
 }
-type Wordget struct {
+type SyncInfo struct {
 	Words   []WordInfotosend `bson:"words" json:"words"`
 	Getdate time.Time        `json:"Getdate"`
 }
@@ -149,13 +149,13 @@ func addHashPass(hashPass []byte, uuidHash uuid.UUID, id primitive.ObjectID) {
 	}
 }
 
-func getAllWords(id primitive.ObjectID) Wordget {
+func getAllWords(id primitive.ObjectID) SyncInfo {
 	_, col := connectDB()
 	//defer disconnectDb(client) // have error when used but still work
 	findOneOptions := options.FindOne()
 	findOneOptions.SetProjection(bson.D{{Key: "_id", Value: 0}, {Key: "words", Value: 1}})
 	filter := bson.D{{Key: "_id", Value: id}}
-	var result Wordget
+	var result SyncInfo
 	err := col.FindOne(nil, filter, findOneOptions).Decode(&result)
 	result.Getdate = time.Now()
 	if err != nil {
@@ -167,13 +167,13 @@ func getAllWords(id primitive.ObjectID) Wordget {
 	return result
 }
 
-func syncDate(id primitive.ObjectID, timeDate time.Time) Wordget {
+func syncDate(id primitive.ObjectID, timeDate time.Time) SyncInfo {
 	_, col := connectDB()
 	//defer disconnectDb(client) // have error when used but still work
 	findOneOptions := options.FindOne().SetProjection(bson.D{{Key: "_id", Value: 0}, {Key: "lastModified", Value: 1}})
 	filter := bson.D{{Key: "_id", Value: id}}
 	var result timetype
-	var results Wordget
+	var results SyncInfo
 	err := col.FindOne(nil, filter, findOneOptions).Decode(&result)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -212,7 +212,7 @@ func syncDate(id primitive.ObjectID, timeDate time.Time) Wordget {
 	return results
 }
 
-func learn(id primitive.ObjectID, data []dataReq) error {
+func learn(id primitive.ObjectID, data []LearnInfo) error {
 	_, col := connectDB()
 	fmt.Println("  Hello   ")
 	for index, elem := range data {
@@ -251,20 +251,20 @@ func learn(id primitive.ObjectID, data []dataReq) error {
 // 	return true, result
 // }
 
-// func IsEmailExist(email string) string {
-// 	_, col := connectDB()
-// 	fmt.Println("after if call 1")
-// 	//defer disconnectDb(client) // have error when used but still work
-// 	filter := bson.D{{Key: "email", Value: email}}
-// 	var result UserInfo
-// 	fmt.Println("after if call 2")
-// 	err := col.FindOne(nil, filter).Decode(&result)
-// 	if err != nil {
-// 		if err == mongo.ErrNoDocuments {
-// 			return nil
-// 		}
-// 		fmt.Println("after if call 4")
-// 		log.Fatal(err)
-// 	}
-// 	return result.ID.String()
-// }
+func IsEmailExist(email string) string {
+	_, col := connectDB()
+	fmt.Println("after if call 1")
+	//defer disconnectDb(client) // have error when used but still work
+	filter := bson.D{{Key: "email", Value: email}}
+	var result UserInfo
+	err := col.FindOne(nil, filter).Decode(&result)
+	if err != nil {
+		fmt.Println("after if call 3")
+		if err == mongo.ErrNoDocuments {
+			return ""
+		}
+		fmt.Println("after if call 4")
+		log.Fatal(err)
+	}
+	return result.ID.Hex()
+}
